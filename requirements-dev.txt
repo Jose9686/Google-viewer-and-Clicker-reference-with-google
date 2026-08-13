@@ -1,0 +1,3 @@
+# Optional: only needed to run the suite via `pytest`.
+# The suite also runs with no extra deps via `python tests/run_all.py`.
+pytest>=7

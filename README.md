@@ -138,13 +138,29 @@ scoreboard at each step. Good for seeing the agent work end-to-end offline.
 
 ## Tests
 
+25 tests, runnable two ways — with pytest, or with **zero extra dependencies**:
+
 ```bash
-python tests/test_reader.py        # or:  python -m pytest -q
+python tests/run_all.py            # no dependencies needed
+python -m pytest -q tests/         # if you have pytest (pip install -r requirements-dev.txt)
 ```
 
-The reader is tested offline (no browser, no network): relevant results beat
-nav chrome, ads get penalised, the reader declines when nothing fits, and the
-LLM adapter falls back cleanly on bad model output.
+What's covered:
+
+- **`test_reader.py`** (offline, no browser) — relevant results beat nav chrome,
+  ads get penalised, the reader declines when nothing fits, URL paths don't
+  pollute scoring, and the `LLMReader` falls back cleanly on bad model output.
+- **`test_agent.py`** (offline) — result-link ranking dedupes by domain and
+  drops search-engine/relative links; answer confidence scales with agreement.
+- **`test_browser.py`** (real Chromium on localhost) — reading clickable
+  elements, prose extraction excluding links, and clicking to navigate.
+- **`test_task_agent.py`** (real Chromium on localhost) — the autonomous agent
+  navigates itself to the right page, records a truthful transcript, never
+  revisits a page, ignores login/ads/chrome, respects the step budget, and
+  always terminates (even on an off-topic task).
+
+Browser-backed tests **skip cleanly** (not fail) if Chromium can't launch, so
+the offline tests still run anywhere.
 
 ## Notes on running against live Google
 
@@ -174,5 +190,9 @@ examples/
   demo_task.py    offline autonomous demo: multi-hop navigation, no guidance
   fixtures/       fake search + content pages
 tests/
-  test_reader.py  offline unit tests for the reader
+  test_reader.py       offline unit tests for the reader
+  test_agent.py        offline unit tests for Agent ranking / synthesis
+  test_browser.py      real-Chromium tests: read, prose, click
+  test_task_agent.py   real-Chromium tests: autonomous navigation
+  run_all.py           zero-dependency test runner (no pytest needed)
 ```

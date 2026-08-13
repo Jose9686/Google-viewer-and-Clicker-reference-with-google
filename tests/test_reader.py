@@ -76,15 +76,36 @@ def test_llm_reader_uses_valid_index():
     assert "LLM" in choice.reason
 
 
+def test_searchable_excludes_raw_href():
+    # A URL's directory path must not become scorable text.
+    el = Element(0, "Edit this page", role="link", href="https://x.org/france/edit.html")
+    assert "france" not in el.searchable.lower()
+    assert "edit this page" in el.searchable.lower()
+
+
+def test_href_path_does_not_pull_selection_off_task():
+    # "Edit" link lives under /france/ but its text is irrelevant; the element
+    # whose *text* matches the goal must win.
+    reader = HeuristicReader()
+    els = [
+        Element(0, "Edit this page", role="link", href="https://x.org/france/edit.html"),
+        Element(1, "France population statistics", role="link", href="https://x.org/p/1"),
+    ]
+    choice = reader.select("france population", els)
+    assert choice.element.index == 1, choice.reason
+
+
+def test_declines_when_only_offtopic_links_present():
+    reader = HeuristicReader()
+    els = [
+        Element(0, "Edit this page", role="link", href="https://x.org/france/edit.html"),
+        Element(1, "View history", role="link", href="https://x.org/france/hist.html"),
+    ]
+    choice = reader.select("france population", els)
+    # Nothing matches "france population" by text -> low score, not a strong pick.
+    assert choice.score < 0.30, choice.reason
+
+
 if __name__ == "__main__":
-    fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
-    failed = 0
-    for fn in fns:
-        try:
-            fn()
-            print(f"PASS  {fn.__name__}")
-        except AssertionError as e:
-            failed += 1
-            print(f"FAIL  {fn.__name__}: {e}")
-    print(f"\n{len(fns) - failed}/{len(fns)} passed")
-    sys.exit(1 if failed else 0)
+    from _run import run_module
+    run_module(globals())
