@@ -23,6 +23,8 @@ import sys
 
 from .agent import Agent
 from .task_agent import TaskAgent
+from .learner import Learner
+from .memory import Memory
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -43,6 +45,16 @@ def build_parser() -> argparse.ArgumentParser:
                         "(uses --start-url or searches the query)")
     p.add_argument("--start-url", help="page to start the autonomous task from")
     p.add_argument("--max-steps", type=int, default=8, help="autonomous step budget (default 8)")
+
+    # -- learning / memory ---------------------------------------------------
+    p.add_argument("--learn", nargs="+", metavar="URL",
+                   help="read these page(s) into memory (what the agent has learned)")
+    p.add_argument("--course", metavar="URL",
+                   help="walk a course from this URL, following 'Next' links, learning each page")
+    p.add_argument("--ask", metavar="QUESTION",
+                   help="answer a question from memory (what it has already read)")
+    p.add_argument("--memory", default="agent_memory.json", metavar="PATH",
+                   help="memory file to read/write (default: agent_memory.json)")
     return p
 
 
@@ -68,6 +80,30 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     query = " ".join(args.query).strip()
+
+    # Learning / memory modes: read pages into a persistent memory, then answer
+    # questions from what it has read. These operate on --memory (a JSON file).
+    if args.learn or args.course or args.ask:
+        import os
+
+        memory = Memory.load(args.memory) if os.path.exists(args.memory) else Memory()
+        learner = Learner(memory=memory, engine=args.engine,
+                          headless=not args.show, verbose=args.verbose)
+
+        if args.course:
+            report = learner.study_course(args.course, max_pages=20)
+            print(report)
+            learner.save(args.memory)
+        if args.learn:
+            report = learner.study(*args.learn)
+            print(report)
+            learner.save(args.memory)
+        if args.ask:
+            ans = learner.ask(args.ask)
+            print(ans)
+        elif not (args.learn or args.course):
+            print("Nothing to do. Use --learn/--course to read, and --ask to query.")
+        return 0
 
     # Autonomous task mode: hand it a goal, it drives itself to completion.
     if args.task:

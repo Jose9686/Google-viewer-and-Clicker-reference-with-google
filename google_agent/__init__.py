@@ -23,6 +23,8 @@ from .reader import Reader, HeuristicReader, LLMReader, Element, Choice
 from .browser import Browser, Clickable
 from .agent import Agent, AgentResult
 from .task_agent import TaskAgent, TaskRun, Visit, Act
+from .memory import Memory, Note, Recall, Answer
+from .learner import Learner, StudyReport
 
 __all__ = [
     "Reader",
@@ -38,6 +40,12 @@ __all__ = [
     "TaskRun",
     "Visit",
     "Act",
+    "Memory",
+    "Note",
+    "Recall",
+    "Answer",
+    "Learner",
+    "StudyReport",
 ]
 
 __version__ = "0.1.0"

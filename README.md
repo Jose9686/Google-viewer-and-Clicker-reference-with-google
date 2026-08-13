@@ -23,6 +23,8 @@ extract text  ->  cross-reference the next sources  ->  answer
 | **Browser** | `google_agent/browser.py` | The eyes and hands. Drives real Chromium (Playwright): open a page, read every clickable element into plain data, click one. |
 | **Agent** | `google_agent/agent.py` | The fixed loop. Search → read → select → click → extract → cross-reference → synthesise an answer, with a full decision trail. |
 | **TaskAgent** | `google_agent/task_agent.py` | The **autonomous** loop. Hand it a task; it perceives → decides → clicks → repeats *on its own* until the task is done or it runs out of promising links. |
+| **Memory** | `google_agent/memory.py` | What it has **learned**. A persistent, searchable note store (BM25 recall) so the agent can read pages, remember them, and answer questions later — across everything it has read. |
+| **Learner** | `google_agent/learner.py` | Reads pages (or walks a course lesson-by-lesson) into `Memory`, then answers from it. |
 | **CLI** | `google_agent/cli.py` | `python -m google_agent "your question"` |
 
 ## Install
@@ -102,6 +104,54 @@ For genuinely tricky multi-hop paths (where the right link's *label* doesn't
 obviously match the goal), plug a real model into the same loop via `LLMReader`
 — the navigation gets much smarter with zero other changes.
 
+## Learning — read a course, remember it, answer from it
+
+The agent doesn't train weights; it **reads and remembers**. As it visits pages
+it breaks the prose into short notes and stores each with its source in a
+persistent `Memory`. Later it answers questions by recalling the most relevant
+notes — pulled from *every* page it has read, not just one — and cites where each
+fact came from. This is the honest version of "have the AI learn from a course":
+it absorbs the material into a knowledge store you can query; it does **not** fake
+course completion or earn credentials.
+
+```bash
+# walk a course, following "Next" links, learning every lesson into memory
+python -m google_agent --course https://example.com/course/lesson1 --memory course.json -v
+
+# read specific pages into memory
+python -m google_agent --learn https://en.wikipedia.org/wiki/Photosynthesis --memory course.json
+
+# ask a question from everything it has read
+python -m google_agent --ask "what does photosynthesis produce" --memory course.json
+```
+
+```python
+from google_agent import Learner, Memory
+
+learner = Learner(verbose=True)
+learner.study_course("https://example.com/course/lesson1")   # reads + remembers each lesson
+learner.save("course.json")                                   # knowledge persists to disk
+
+ans = learner.ask("what are the inputs to photosynthesis")
+print(ans)                    # the answer, plus the notes and sources it came from
+print(ans.corroborating_sources)   # how many independent pages support the topic
+```
+
+Memory persists to a JSON file, so knowledge **accumulates across runs** — study
+more pages later and they join what's already there. Recall uses **BM25** (rare,
+distinctive words drive the match; long notes aren't unfairly favoured) with light
+stemming so singular/plural forms match. See it work offline:
+
+```bash
+python examples/demo_learn.py   # walks a 3-lesson course, then answers from memory
+```
+
+> Making it smarter still: the recall is keyword-based, so it finds the sentence
+> that *contains* the answer rather than composing across notes. Plug a real model
+> in (via `LLMReader`, or feed `memory.recall(...)` notes to any LLM as context)
+> and you get fluent, composed answers grounded in exactly what it read — a small,
+> honest RAG setup.
+
 ## The reader (how "select" works)
 
 `HeuristicReader` tokenises your goal and each element's text and scores
@@ -138,7 +188,7 @@ scoreboard at each step. Good for seeing the agent work end-to-end offline.
 
 ## Tests
 
-25 tests, runnable two ways — with pytest, or with **zero extra dependencies**:
+39 tests, runnable two ways — with pytest, or with **zero extra dependencies**:
 
 ```bash
 python tests/run_all.py            # no dependencies needed
@@ -158,6 +208,11 @@ What's covered:
   navigates itself to the right page, records a truthful transcript, never
   revisits a page, ignores login/ads/chrome, respects the step budget, and
   always terminates (even on an off-topic task).
+- **`test_memory.py`** (offline) — sentence chunking + dedupe, BM25 recall picks
+  the right note, stemming bridges singular/plural, cross-source answers, and
+  save/load persistence round-trips.
+- **`test_learner.py`** (real Chromium on localhost) — walks a course through
+  every lesson, learns facts answerable from memory, and persists/reloads them.
 
 Browser-backed tests **skip cleanly** (not fail) if Chromium can't launch, so
 the offline tests still run anywhere.
@@ -184,15 +239,20 @@ google_agent/
   browser.py      real-Chromium control: open, read (+ prose), click
   agent.py        the fixed search -> select -> click -> cross-reference loop
   task_agent.py   the autonomous perceive -> decide -> act loop (TaskAgent)
+  memory.py       persistent, searchable note store (what it has learned)
+  learner.py      read pages / walk a course into memory, answer from it
   cli.py          command-line entry point
 examples/
-  demo_local.py   offline end-to-end demo: read -> select -> click -> cross-reference
+  demo_local.py   offline demo: read -> select -> click -> cross-reference
   demo_task.py    offline autonomous demo: multi-hop navigation, no guidance
-  fixtures/       fake search + content pages
+  demo_learn.py   offline demo: walk a course, remember it, answer from memory
+  fixtures/       fake search + content pages, incl. a 3-lesson course
 tests/
   test_reader.py       offline unit tests for the reader
   test_agent.py        offline unit tests for Agent ranking / synthesis
+  test_memory.py       offline unit tests for Memory (BM25 recall, persistence)
   test_browser.py      real-Chromium tests: read, prose, click
   test_task_agent.py   real-Chromium tests: autonomous navigation
+  test_learner.py      real-Chromium tests: learn a course, answer from memory
   run_all.py           zero-dependency test runner (no pytest needed)
 ```

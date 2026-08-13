@@ -76,12 +76,16 @@ class Choice:
 
 _WORD_RE = re.compile(r"[a-z0-9]+")
 
-# Very small English stop-word list -- enough to stop "the/of/and" from
-# dominating overlap scores without pulling in a heavyweight NLP dependency.
+# Very small English stop-word list -- enough to stop "the/of/and" and question
+# words ("what/does/where") from dominating overlap scores, without pulling in a
+# heavyweight NLP dependency. Question words matter especially for memory recall:
+# otherwise "what ..." matches every heading titled "What is ...?".
 _STOP = frozenset(
     """
     a an the of to in on at for and or but is are was were be been being this
     that these those it its with as by from into your you i we they he she
+    what when where which who whom whose why how do does did doing done
+    can could will would should shall may might must about
     """.split()
 )
 
