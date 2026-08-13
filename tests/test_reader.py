@@ -1,0 +1,90 @@
+"""
+Offline tests for the reader -- no browser, no network.
+
+Run:  python -m pytest -q      (or)      python tests/test_reader.py
+"""
+
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from google_agent.reader import Element, HeuristicReader, LLMReader
+
+
+def _results_page():
+    """A fake Google-results-page's worth of clickable elements."""
+    return [
+        Element(0, "Sign in", role="link", href="https://accounts.google.com/signin"),
+        Element(1, "Settings", role="button"),
+        Element(2, "Paris - Wikipedia", role="link",
+                href="https://en.wikipedia.org/wiki/Paris",
+                context="Paris is the capital and most populous city of France"),
+        Element(3, "France travel deals - book now", role="link",
+                href="https://ads.example.com/france", context="sponsored"),
+        Element(4, "What is the capital of France? - Quora", role="link",
+                href="https://quora.com/capital-of-france"),
+    ]
+
+
+def test_selects_relevant_result_over_chrome():
+    reader = HeuristicReader()
+    choice = reader.select("capital of France", _results_page())
+    assert choice.should_click
+    # Should pick Wikipedia or Quora (real answers), never "Sign in"/"Settings".
+    assert choice.element.index in (2, 4), choice.reason
+    assert "capital" in choice.element.searchable.lower() or "france" in choice.element.searchable.lower()
+
+
+def test_phrase_boost_prefers_exact_match():
+    reader = HeuristicReader()
+    choice = reader.select("capital of France", _results_page())
+    # Wikipedia's context contains the exact phrase "capital and most populous".
+    top_indices = [el.index for el, _ in choice.ranked[:2]]
+    assert 2 in top_indices
+
+
+def test_declines_when_nothing_relevant():
+    reader = HeuristicReader(threshold=0.5)
+    els = [
+        Element(0, "Sign in", role="link", href="https://accounts.google.com/signin"),
+        Element(1, "Cookie preferences", role="button"),
+    ]
+    choice = reader.select("photosynthesis in deep sea vents", els)
+    assert not choice.should_click, choice.reason
+
+
+def test_negative_markers_penalise_ads():
+    reader = HeuristicReader()
+    score_ad = reader.relevance("france", "France travel deals sponsored advertisement")
+    score_real = reader.relevance("france", "France country in Europe capital Paris")
+    assert score_real > score_ad
+
+
+def test_llm_reader_falls_back_on_bad_output():
+    # A "model" that returns junk -> should fall back to heuristic, not crash.
+    reader = LLMReader(complete=lambda prompt: "banana")
+    choice = reader.select("capital of France", _results_page())
+    assert choice.should_click
+    assert "fell back" in choice.reason
+
+
+def test_llm_reader_uses_valid_index():
+    reader = LLMReader(complete=lambda prompt: "I choose [2]")
+    choice = reader.select("capital of France", _results_page())
+    assert choice.element.index == 2
+    assert "LLM" in choice.reason
+
+
+if __name__ == "__main__":
+    fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
+    failed = 0
+    for fn in fns:
+        try:
+            fn()
+            print(f"PASS  {fn.__name__}")
+        except AssertionError as e:
+            failed += 1
+            print(f"FAIL  {fn.__name__}: {e}")
+    print(f"\n{len(fns) - failed}/{len(fns)} passed")
+    sys.exit(1 if failed else 0)
