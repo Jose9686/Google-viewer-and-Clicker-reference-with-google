@@ -21,7 +21,8 @@ extract text  ->  cross-reference the next sources  ->  answer
 |-------|------|-----|
 | **Reader** | `google_agent/reader.py` | The brain. Scores every clickable element against your goal and picks one — or decides nothing's worth clicking. Fully local (`HeuristicReader`) with a pluggable LLM adapter (`LLMReader`). |
 | **Browser** | `google_agent/browser.py` | The eyes and hands. Drives real Chromium (Playwright): open a page, read every clickable element into plain data, click one. |
-| **Agent** | `google_agent/agent.py` | The loop. Search → read → select → click → extract → cross-reference → synthesise an answer, with a full decision trail. |
+| **Agent** | `google_agent/agent.py` | The fixed loop. Search → read → select → click → extract → cross-reference → synthesise an answer, with a full decision trail. |
+| **TaskAgent** | `google_agent/task_agent.py` | The **autonomous** loop. Hand it a task; it perceives → decides → clicks → repeats *on its own* until the task is done or it runs out of promising links. |
 | **CLI** | `google_agent/cli.py` | `python -m google_agent "your question"` |
 
 ## Install
@@ -65,6 +66,41 @@ print(result.summary())      # answer + ranked sources
 for step in result.trail:    # every decision, for transparency
     print(step.action, step.detail)
 ```
+
+## Autonomous mode — hand it a task, it just does it
+
+`TaskAgent` doesn't stop after one click. You give it a goal and (optionally) a
+starting page; it drives itself — perceive the page, pick the single best link
+toward the task, click, repeat — and stops on its own when no link is worth
+clicking any more, then hands back the page it judged most relevant plus a full
+transcript of every move.
+
+```bash
+# autonomous: navigate a site on its own until the task is satisfied
+python -m google_agent --task "france population" --start-url https://en.wikipedia.org/wiki/France -v
+```
+
+```python
+from google_agent import TaskAgent
+
+run = TaskAgent(verbose=True, max_steps=8).do(
+    "france population",
+    start_url="https://en.wikipedia.org/wiki/France",
+)
+print(run.summary())     # what it clicked, why, where it stopped, and the answer
+```
+
+You control how far it roams with `max_steps` (a hard cap so it can never loop
+forever) and how picky it is with `click_threshold`. It never re-visits a page
+and never needs step-by-step approval. See it work offline over a real browser:
+
+```bash
+python examples/demo_task.py     # search -> France profile -> Population page, two clicks, no guidance
+```
+
+For genuinely tricky multi-hop paths (where the right link's *label* doesn't
+obviously match the goal), plug a real model into the same loop via `LLMReader`
+— the navigation gets much smarter with zero other changes.
 
 ## The reader (how "select" works)
 
@@ -129,11 +165,13 @@ LLM adapter falls back cleanly on bad model output.
 google_agent/
   __init__.py     public API
   reader.py       the brain: read & select (HeuristicReader, LLMReader)
-  browser.py      real-Chromium control: open, read, click
-  agent.py        the search -> select -> click -> cross-reference loop
+  browser.py      real-Chromium control: open, read (+ prose), click
+  agent.py        the fixed search -> select -> click -> cross-reference loop
+  task_agent.py   the autonomous perceive -> decide -> act loop (TaskAgent)
   cli.py          command-line entry point
 examples/
-  demo_local.py   offline end-to-end demo over localhost fixtures
+  demo_local.py   offline end-to-end demo: read -> select -> click -> cross-reference
+  demo_task.py    offline autonomous demo: multi-hop navigation, no guidance
   fixtures/       fake search + content pages
 tests/
   test_reader.py  offline unit tests for the reader

@@ -46,8 +46,14 @@ class Element:
 
     @property
     def searchable(self) -> str:
-        """All the text a reader should consider for this element."""
-        return " ".join(p for p in (self.text, self.context, self.href) if p)
+        """The text a reader should consider for this element.
+
+        Deliberately excludes the raw ``href``: a URL's directory path (e.g.
+        ``/france/edit.html``) would otherwise hand every link in that section a
+        free keyword match and pull the agent off-task. The link's visible text
+        and its aria-label/title (``context``) are the honest signal.
+        """
+        return " ".join(p for p in (self.text, self.context) if p)
 
 
 @dataclass

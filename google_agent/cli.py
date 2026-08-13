@@ -22,6 +22,7 @@ import argparse
 import sys
 
 from .agent import Agent
+from .task_agent import TaskAgent
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -37,6 +38,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--verbose", "-v", action="store_true", help="print each decision as it happens")
     p.add_argument("--url", help="read a single URL instead of searching")
     p.add_argument("--goal", help="goal to use with --url (what to click toward)")
+    p.add_argument("--task", action="store_true",
+                   help="autonomous mode: navigate on its own until the task is done "
+                        "(uses --start-url or searches the query)")
+    p.add_argument("--start-url", help="page to start the autonomous task from")
+    p.add_argument("--max-steps", type=int, default=8, help="autonomous step budget (default 8)")
     return p
 
 
@@ -61,8 +67,24 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Would click -> [{element.role}] {element.text!r}  {element.href}")
         return 0
 
-    # Search + cross-reference mode.
     query = " ".join(args.query).strip()
+
+    # Autonomous task mode: hand it a goal, it drives itself to completion.
+    if args.task:
+        if not query and not args.start_url:
+            print("--task needs a task description (and optionally --start-url).")
+            return 2
+        task_agent = TaskAgent(
+            engine=args.engine,
+            headless=not args.show,
+            max_steps=args.max_steps,
+            verbose=args.verbose,
+        )
+        run = task_agent.do(query or "explore", start_url=args.start_url)
+        print(run.summary())
+        return 0
+
+    # Search + cross-reference mode.
     if not query:
         build_parser().print_help()
         return 2

@@ -22,6 +22,7 @@ default "reader" runs entirely on your machine.
 from .reader import Reader, HeuristicReader, LLMReader, Element, Choice
 from .browser import Browser, Clickable
 from .agent import Agent, AgentResult
+from .task_agent import TaskAgent, TaskRun, Visit, Act
 
 __all__ = [
     "Reader",
@@ -33,6 +34,10 @@ __all__ = [
     "Clickable",
     "Agent",
     "AgentResult",
+    "TaskAgent",
+    "TaskRun",
+    "Visit",
+    "Act",
 ]
 
 __version__ = "0.1.0"

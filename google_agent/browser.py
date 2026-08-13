@@ -238,6 +238,26 @@ class Browser:
         body = " ".join(body.split())
         return body[:max_chars]
 
+    def content_text(self, max_chars: int = 4000) -> str:
+        """Prose only -- page text with links, buttons and nav chrome removed.
+
+        The autonomous task loop judges "have I actually found the answer?" from
+        real content, not from the labels of links that merely *point* at it, so
+        it needs the paragraph text without anchor/nav noise.
+        """
+        assert self.page is not None
+        js = (
+            "() => {"
+            "  const b = document.body; if (!b) return '';"
+            "  const c = b.cloneNode(true);"
+            "  c.querySelectorAll('a,button,nav,header,footer,script,style,[role=button]')"
+            "   .forEach(n => n.remove());"
+            "  return c.innerText || '';"
+            "}"
+        )
+        body = " ".join(self.page.evaluate(js).split())
+        return body[:max_chars]
+
     def title(self) -> str:
         assert self.page is not None
         return self.page.title()
